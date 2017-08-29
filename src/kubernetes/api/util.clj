@@ -2,6 +2,8 @@
   (:require [clojure.string :as str]
             [clojure.core.async :refer [go <! >! chan]]
             [org.httpkit.client :as http]
+            [common-crypto.keyczar.core :as keyczar]
+            [common-core.misc :as misc]
             [clojure.data.json :as json]))
 
 (defn make-context [server]
@@ -27,20 +29,33 @@
        (if (empty? query) "" "?")
        (query-str query)))
 
+(defn- token [username password]
+  (when (and username password)
+    (->> (str username ":" password)
+         keyczar/string->bytes
+         keyczar/bytes->base64
+         (str "Basic "))))
+
+(defn- content-type [method]
+  (if (= method :patch)
+    "application/merge-patch+json"
+    "application/json"))
+
 (defn parse-response [{:keys [status headers body error]}]
   (cond
     error {:success false :error error}
     :else (json/read-str body :key-fn keyword)))
 
-(defn request [ctx {:keys [method path params query body]}]
+(defn request [{:keys [username password] :as ctx} {:keys [method path params query body]}]
   (let [c (chan)
-        content-type (if (= method :patch) "application/merge-patch+json" "application/json")]
+        ct (content-type method)
+        authentication (token username password)]
     (http/request
      (cond-> {:url (url ctx path params query)
               :method method
               :as :text}
        body (assoc :body (json/write-str body)
-                   :headers  {"Content-Type" content-type}))
+                   :headers  (misc/assoc-if {"Content-Type" ct} "Authorization" authentication)))
      #(go (let [resp (parse-response %)]
             #_(println "Request" method path query body resp)
             (>! c resp))))
