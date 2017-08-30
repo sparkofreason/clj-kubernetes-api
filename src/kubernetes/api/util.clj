@@ -31,10 +31,7 @@
 
 (defn- token [username password]
   (when (and username password)
-    (->> (str username ":" password)
-         keyczar/string->bytes
-         keyczar/bytes->base64
-         (str "Basic "))))
+    (str username ":" password)))
 
 (defn- content-type [method]
   (if (= method :patch)
@@ -44,7 +41,10 @@
 (defn parse-response [{:keys [status headers body error]}]
   (cond
     error {:success false :error error}
-    :else (json/read-str body :key-fn keyword)))
+    :else (try
+            (json/read-str body :key-fn keyword)
+            (catch Exception e
+              body))))
 
 (defn request [{:keys [username password] :as ctx} {:keys [method path params query body]}]
   (let [c (chan)
@@ -53,9 +53,11 @@
     (http/request
      (cond-> {:url (url ctx path params query)
               :method method
+              :insecure? true
+              :basic-auth authentication
               :as :text}
        body (assoc :body (json/write-str body)
-                   :headers  (misc/assoc-if {"Content-Type" ct} "Authorization" authentication)))
+                   :headers  {"Content-Type" ct}))
      #(go (let [resp (parse-response %)]
             #_(println "Request" method path query body resp)
             (>! c resp))))
