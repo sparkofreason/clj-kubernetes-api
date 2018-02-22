@@ -1,4 +1,4 @@
-(defproject kubernetes-api "1.2.0"
+(defproject kubernetes-api "1.2.1-SNAPSHOT"
   :description "Kubernetes Client API Library"
   :url "https://github.com/yanatan16/clj-kubernetes-api"
   :license {:name "MIT"
@@ -15,7 +15,9 @@
 
   :repositories  [["central"  {:url "https://repo1.maven.org/maven2/" :snapshots false}]
                   ["clojars"  {:url "https://clojars.org/repo/"}]
-                  ["nu-maven" {:url "s3p://nu-maven/releases/" :snapshots false :sign-releases false}]]
+                  ["nu-maven" {:url "s3p://nu-maven/releases/" :snapshots false}]]
+
+  :deploy-repositories [["releases" {:url "s3p://nu-maven/releases/" :no-auth true}]]
 
   :codox {:namespaces [#"kubernetes\.api\.v\d.*"]}
 
