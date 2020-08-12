@@ -1,7 +1,8 @@
 (ns kubernetes.api.util
   (:require [clojure.string :as str]
-            [clojure.core.async :refer [go <! >! chan]]
-            [org.httpkit.client :as http]
+            [clojure.core.async :as async]
+            [clojure.java.io :as io]
+            [clj-http.client :as http]
             [clojure.data.json :as json]
             [less.awful.ssl :as ssl]))
 
@@ -44,10 +45,9 @@
 (defn parse-response [{:keys [status headers body error]}]
   (cond
     error {:success false :error error}
-    :else (try
-            (json/read-str body :key-fn keyword)
-            (catch Exception e
-              body))))
+    (= "application/json" (headers "Content-Type")) (with-open [rdr (io/reader body)]
+                                                      (json/read rdr :key-fn keyword))
+    :else body))
 
 (defn- basic-auth? [{:keys [username password]}]
   (every? some? [username password]))
@@ -65,7 +65,7 @@
   {:url       (url ctx path params query)
    :method    method
    :insecure? (not (client-cert? ctx))
-   :as        :text})
+   :as        :stream})
 
 (defn- request-auth-opts [{:keys [username password ca-cert client-cert client-key token token-fn] :as ctx} opts]
   (cond
@@ -86,12 +86,12 @@
     {:body    (json/write-str body)
      :headers {"Content-Type" (content-type method)}}))
 
+
 (defn- request-opts [ctx opts]
   (merge (default-request-opts ctx opts)
          (request-auth-opts ctx opts)
          (request-body-opts opts)))
 
 (defn request [ctx opts]
-  (let [c (chan)]
-    (http/request (request-opts ctx opts) #(go (>! c (parse-response %))))
-    c))
+  (let [opts (request-opts ctx opts)]
+    (async/thread (-> opts http/request parse-response))))
